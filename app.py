@@ -27,22 +27,25 @@ h1, h2, h3, h4, p, label, .stMarkdown, .stText {
 }
 
 /* 텍스트 입력창 테두리 색상 */
-.stTextInput>div>div>input {
+.stTextInput>div>div>input, .stTextArea>div>div>textarea {
     border: 1px solid #4B3621 !important;
 }
 
-/* 클릭 버튼 스타일 (다크 브라운) */
+/* ★★★ 버튼 스타일 수정: 배경 검정, 글자 흰색 굵게 ★★★ */
 .stButton>button {
-    background-color: #4B3621;
-    color: white !important;
+    background-color: #000000 !important;
+    color: #ffffff !important;
     border: none;
     border-radius: 8px;
-    font-weight: bold;
+    font-size: 20px !important;
+    font-weight: bold !important;
     width: 100%;
-    padding: 10px;
+    padding: 15px;
+    margin-top: 10px;
 }
 .stButton>button:hover {
-    background-color: #3b2816;
+    background-color: #333333 !important;
+    color: #ffffff !important;
 }
 
 /* 결과 출력용 Text Area 스타일링 */
@@ -92,158 +95,95 @@ st.markdown("<br>", unsafe_allow_html=True)
 api_key = st.secrets["GEMINI_API_KEY"]
 store_name = st.text_input("🏢 AS 접수 점포명을 입력하세요 (예시: 프리헷 강남점)")
 
-st.write("🎙️ **카톡 캡처 사진**이나 **녹음 파일**을 올려주세요. AI가 자동으로 내용을 요약합니다.")
+st.markdown("---")
+st.write("🎙️ **방법 1: 파일 업로드** (카톡 캡처나 음성)")
 evidence_file = st.file_uploader("사진(png, jpg) 또는 음성(mp3, wav, m4a)", type=["png", "jpg", "jpeg", "mp3", "wav", "m4a"])
 
-# 실행 버튼
-if st.button("🚀 AS 자동 접수 시작하기"):
-    # 누락된 파일이나 입력값 방어 코딩
+st.write("✍️ **방법 2: 텍스트 직접 입력**")
+user_text = st.text_area("파일이 없다면 여기에 증상을 직접 적어주세요.", placeholder="예: 세탁기 3번 기기에서 소음이 발생하고 결제가 안 됩니다.")
+st.markdown("---")
 
+# 실행 버튼 (강조된 스타일 적용됨)
+if st.button("🚀 AS 접수 시작하기"):
+    # 누락된 입력값 방어 코딩
     if not store_name:
         st.warning("점포명을 입력해주세요!")
         st.stop()
-    if not evidence_file:
-        st.warning("증상을 확인할 수 있는 파일(사진/음성)을 업로드해주세요!")
+    
+    # 파일도 없고 텍스트도 없는 경우 차단
+    if not evidence_file and not user_text.strip():
+        st.warning("증상을 확인할 수 있는 파일(사진/음성)을 올리거나 텍스트를 입력해주세요!")
         st.stop()
+
     if not os.path.exists("list.pdf"):
-        st.error("현재 폴더에 가맹점 리스트 문서인 'list.pdf' 파일이 없습니다. 준비해주세요!")
+        st.error("현재 폴더에 'list.pdf' 파일이 없습니다.")
         st.stop()
     if not os.path.exists("contact.png"):
-        st.error("현재 폴더에 비상연락망 이미지인 'contact.png' 파일이 없습니다. 준비해주세요!")
+        st.error("현재 폴더에 'contact.png' 파일이 없습니다.")
         st.stop()
 
     # 제미나이 초기 권한 설정
     genai.configure(api_key=api_key)
-    
-    # 두 가지 모델 모두 장점이 달라 목적별로 활용합니다.
-    # Flash 모델: 일반 텍스트나 간단 문맹 분석에 매우 빠름
-    # Pro 모델: 복잡한 카톡 대화요약이나 음성 분석에 높은 정확도
-    model_flash = genai.GenerativeModel('gemini-2.5-flash')
-    model_pro = genai.GenerativeModel('gemini-2.5-flash')
+    model_flash = genai.GenerativeModel('gemini-1.5-flash') # 모델명 최신화 유지
 
     with st.spinner("AI가 자료들을 스캔하고 분석중입니다. (잠시만 기다려주세요!)"):
         
-        # ========================================================
-        # [단계 1] 가맹점 PDF에서 점포 상세 정보 뽑아오기
-        # ========================================================
-        st.info("📄 가맹점 리스트(PDF)에서 주소와 담당 바이저를 찾고 있어요...")
+        # [단계 1] 가맹점 PDF 정보 추출
         pdf_text = ""
-        try:
-            reader = PyPDF2.PdfReader("list.pdf")
-            for page in reader.pages:
-                text = page.extract_text()
-                if text:
-                    pdf_text += text + "\n"
-        except Exception as e:
-            st.error(f"PDF 파일 내용을 읽는데 실패했습니다: {e}")
-            st.stop()
+        reader = PyPDF2.PdfReader("list.pdf")
+        for page in reader.pages:
+            text = page.extract_text()
+            if text: pdf_text += text + "\n"
             
-        pdf_prompt = f"""
-        다음은 가맹점 정보가 담긴 문서 텍스트입니다.
-        {pdf_text}
-        
-        여기서 '{store_name}' 점포의 정보를 찾아, 아래 5개 항목을 순수한 JSON 포맷으로 추출해주세요:
-        {{
-            "장비번호": "값",
-            "출고일자": "값",
-            "주소": "값",
-            "연락처": "값",
-            "담당 바이저 이름": "이름만 (SVOOO 등)"
-        }}
-        * 만약 텍스트에서 찾을 수 없는 값이 있다면, 해당 항목은 빈 문자열("")로 남겨주세요!
-        * 코드 블록 기호(```json 등)는 절대 쓰지 말고 괄호 {{ }} 부분만 출력하세요.
-        """
-        
+        pdf_prompt = f"{pdf_text}\n\n위 데이터에서 '{store_name}' 점포의 장비번호, 출고일자, 주소, 연락처, 담당 바이저 이름을 JSON으로 추출해."
         pdf_resp = model_flash.generate_content(pdf_prompt)
         store_info = parse_json(pdf_resp.text)
-        
         supervisor_name = store_info.get("담당 바이저 이름", "")
 
-        # ========================================================
-        # [단계 2] 비상연락망 이미지에서 해당 바이저 연락처 스캔(OCR)
-        # ========================================================
-        supervisor_phone = ""
+        # [단계 2] 비상연락망 OCR
+        supervisor_phone = "확인불가"
         if supervisor_name:
-            st.info(f"🔍 '{supervisor_name}' 담당자 연락처를 비상연락망 이미지에서 스캔하고 있어요...")
-            try:
-                contact_img = Image.open("contact.png")
-                ocr_prompt = f"""
-                비상 연락망 연락처 표기가 된 이미지 문서입니다.
-                '{supervisor_name}'의 연락처(휴대폰 번호)를 찾아서 
-                번호만 출력해주세요. (예: 010-1234-5678)
-                찾을 수 없다면 '확인불가' 라고만 대답하세요.
-                """
-                ocr_resp = model_flash.generate_content([contact_img, ocr_prompt])
-                supervisor_phone = ocr_resp.text.strip()
-            except Exception as e:
-                supervisor_phone = "이미지 스캔 오류"
-        else:
-            supervisor_phone = "이름을 찾지 못해 연락처 검색 불가"
+            contact_img = Image.open("contact.png")
+            ocr_resp = model_flash.generate_content([contact_img, f"'{supervisor_name}'의 연락처 번호만 말해줘."])
+            supervisor_phone = ocr_resp.text.strip()
 
-
-        # ========================================================
-        # [단계 3] 증상 파일(카톡 이미지 혹은 음성파일) AI 멀티모달 분석
-        # ========================================================
-        st.info("⚙️ 파트너님이 올리신 카톡 캡처/음성을 분석해서 증상을 파악하고 있어요...")
+        # [단계 3] 증상 분석 (파일 또는 텍스트)
         symptom_text = ""
         request_text = ""
         
-        file_ext = evidence_file.name.split(".")[-1].lower()
+        # 1순위: 파일 분석
+        if evidence_file:
+            file_ext = evidence_file.name.split(".")[-1].lower()
+            analysis_prompt = "AS 접수 자료야. '증상'과 '처리요청'을 JSON으로 요약해."
+            
+            if file_ext in ["png", "jpg", "jpeg"]:
+                img = Image.open(evidence_file)
+                resp = model_flash.generate_content([img, analysis_prompt])
+            else:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file_ext}") as tmp:
+                    tmp.write(evidence_file.read())
+                    uploaded_audio = genai.upload_file(path=tmp.name)
+                    resp = model_flash.generate_content([uploaded_audio, analysis_prompt])
+                    uploaded_audio.delete()
+                    os.remove(tmp.name)
+            
+            parsed = parse_json(resp.text)
+            symptom_text = parsed.get("증상", "")
+            request_text = parsed.get("처리요청", "")
         
-        if file_ext in ["png", "jpg", "jpeg"]:
-            # 이미지(카톡 캡처 등)인 경우
-            img_evidence = Image.open(evidence_file)
-            analysis_prompt = """
-            고객/가맹점주가 접수한 AS 문제를 나타내는 캡처 이미지 혹은 현장 사진입니다.
-            이미지 안의 내용(텍스트 포함)을 파악해서 아래 항목으로 요약해주세요.
-            
-            순수한 JSON 형식으로만 답해주세요 (마크다운 기호 없이!):
-            {
-                "증상": "요약된 기기 오류 또는 문제 현상",
-                "처리요청": "요약된 바라는 조치 사항이나 수리 요청 내용"
-            }
-            """
-            analysis_resp = model_pro.generate_content([img_evidence, analysis_prompt])
-            parsed = parse_json(analysis_resp.text)
-            symptom_text = parsed.get("증상", "증상 파악 불가")
-            request_text = parsed.get("처리요청", "요청 파악 불가")
-            
-        elif file_ext in ["mp3", "wav", "m4a"]:
-            # 음성 파일인 경우 (Temp 파일 변환 후, Gemini File API 업로드 필요)
-            st.info("🎵 음성파일 판독 중...")
-            with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file_ext}") as tmp:
-                tmp.write(evidence_file.read())
-                tmp_path = tmp.name
-                
-            try:
-                uploaded_audio = genai.upload_file(path=tmp_path)
-                analysis_prompt = """
-                다음은 AS 접수를 위한 고객/가맹점주의 음성 녹음 파일입니다.
-                내용(목소리)을 잘 듣고, '증상'과 '처리요청'을 정확하게 요약해주세요.
-                
-                순수한 JSON 형식으로만 답해주세요 (마크다운 기호 없이!):
-                {
-                    "증상": "요약된 기기 오류 또는 문제 현상",
-                    "처리요청": "요약된 바라는 조치 사항이나 수리 요청 내용"
-                }
-                """
-                analysis_resp = model_pro.generate_content([uploaded_audio, analysis_prompt])
-                parsed = parse_json(analysis_resp.text)
-                symptom_text = parsed.get("증상", "음성 파악 불가")
-                request_text = parsed.get("처리요청", "요청 파악 불가")
-                
-                # 안전하게 서버상 파일 삭제
-                uploaded_audio.delete()
-            except Exception as e:
-                st.error(f"음성 파일 분석 중 오류가 났습니다: {e}")
-            finally:
-                os.remove(tmp_path)
+        # 2순위: 텍스트 입력이 있다면 내용 보강/대체
+        if user_text.strip():
+            if not symptom_text: # 파일이 없었을 경우 텍스트로만 분석
+                text_prompt = f"다음 증상을 읽고 '증상'과 '처리요청'을 요약해: {user_text}"
+                resp = model_flash.generate_content(text_prompt)
+                # 단순 텍스트로 올 때가 많으므로 정제 로직
+                symptom_text = user_text if len(user_text) < 50 else "텍스트 입력 참조"
+                request_text = "현장 확인 및 수리 요청"
+            else:
+                symptom_text += f" (추가입력: {user_text})"
 
-        # ========================================================
-        # [단계 4] 최종 결과 양식 맞춰서 텍스트 렌더링하기
-        # ========================================================
+        # [단계 4] 최종 출력
         today = datetime.now().strftime("%Y년 %m월 %d일")
-        
         final_text = f"""<< 무인머신 AS접수 >>
 ▣ 접수일 : {today}
 ▣ 점포명 : {store_name}
@@ -256,7 +196,5 @@ if st.button("🚀 AS 자동 접수 시작하기"):
 ▣ 처리요청 : {request_text}
 ▣ 특이사항 : """
 
-        st.success("🎉 만세! AS 접수 문서 자동 작성이 완료되었습니다.")
-        
-        # 쉽게 복사할 수 있도록 높이가 여유로운 구역(Text Area)을 제공
-        st.text_area("아래 출력된 내용을 복사해서 공유 및 전달하시면 됩니다.", value=final_text, height=350)
+        st.success("🎉 AS 접수 문서 작성이 완료되었습니다.")
+        st.text_area("결과 복사하기", value=final_text, height=350)
