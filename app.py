@@ -11,7 +11,7 @@ from datetime import datetime
 # ========================================================
 # 1. 디자인 및 브랜드 톤앤매너 설정
 # ========================================================
-st.set_page_config(page_title="Frihet 무인머신 AS 접수", layout="centered")
+st.set_page_config(page_title="Frihet 무인카페 AS 접수", layout="centered")
 
 # 배경색 및 버튼 스타일 최종 수정 CSS
 st.markdown("""
@@ -28,11 +28,11 @@ h1, h2, h3, h4, p, label, .stMarkdown, .stText {
 
 /* ★★★ 버튼 스타일: 밝은 브라운 배경 + 진한 검정 글자 ★★★ */
 div.stButton > button:first-child {
-    background-color: #D2B48C !important; /* 밝은 갈색 (Tan/Latte 색상) */
-    color: #1A1A1A !important;           /* ★진한 검정색 글자★ */
-    border: 2px solid #4B3621 !important; /* 테두리는 진하게 */
+    background-color: #D2B48C !important; /* 밝은 갈색 (라떼 색상) */
+    color: #000000 !important;           /* ★진한 검정색 글자★ */
+    border: 2px solid #4B3621 !important; /* 테두리는 브랜드색 */
     border-radius: 12px !important;
-    font-size: 22px !important;           /* 글자 크기 */
+    font-size: 22px !important;           
     font-weight: 900 !important;          /* ★초강력 볼드★ */
     height: 4em !important;
     width: 100% !important;
@@ -41,7 +41,7 @@ div.stButton > button:first-child {
 
 /* 버튼 안의 글자색 강제 고정 */
 div.stButton > button:first-child span {
-    color: #1A1A1A !important;
+    color: #000000 !important;
 }
 
 /* 호버 시 살짝 더 진해지게 */
@@ -89,7 +89,8 @@ st.write("🎙️ **방법 1: 파일 업로드** (카톡 캡처나 음성)")
 evidence_file = st.file_uploader("사진(png, jpg) 또는 음성(mp3, wav, m4a)", type=["png", "jpg", "jpeg", "mp3", "wav", "m4a"])
 
 st.write("✍️ **방법 2: 텍스트 직접 입력**")
-user_text = st.text_area("파일이 없다면 여기에 증상을 직접 적어주세요.", placeholder="예: 세탁기 3번 기기에서 소음이 발생합니다.")
+# ★ 예시 문구 카페 상황에 맞게 수정 ★
+user_text = st.text_area("파일이 없다면 여기에 증상을 직접 적어주세요.", placeholder="예: 커피 머신에서 원두 추출이 안 되고 물만 나옵니다. 제빙기 얼음이 얼지 않아요.")
 st.markdown("---")
 
 # 실행 버튼
@@ -146,3 +147,27 @@ if st.button("🚀 AS 접수 시작하기"):
             parsed = parse_json(resp.text)
             symptom_text = parsed.get("증상", "")
             request_text = parsed.get("처리요청", "")
+        
+        if user_text.strip():
+            if symptom_text:
+                symptom_text += f" (추가입력: {user_text})"
+            else:
+                symptom_text = user_text
+                request_text = "현장 확인 및 수리 요청"
+
+        # 최종 출력
+        today = datetime.now().strftime("%Y년 %m월 %d일")
+        final_text = f"""<< 무인머신 AS접수 >>
+▣ 접수일 : {today}
+▣ 점포명 : {store_name}
+▣ 장비번호 : {store_info.get('장비번호', '확인불가')}
+▣ 출고일자 : {store_info.get('출고일자', '확인불가')}
+▣ 연락처 : {store_info.get('연락처', '확인불가')}
+▣ 담당 연락처 : {supervisor_phone}
+▣ 주소 : {store_info.get('주소', '확인불가')}
+▣ 증상 : {symptom_text}
+▣ 처리요청 : {request_text}
+▣ 특이사항 : """
+
+        st.success("🎉 AS 접수 문서 작성이 완료되었습니다.")
+        st.text_area("결과 복사하기", value=final_text, height=350)
