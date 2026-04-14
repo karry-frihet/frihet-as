@@ -13,7 +13,7 @@ from datetime import datetime
 # ========================================================
 st.set_page_config(page_title="Frihet 무인머신 AS 접수", layout="centered")
 
-# 배경색(베이지) 및 강조색(다크 브라운) 지정 CSS
+# 배경색(베이지) 및 브랜드 색상(다크 브라운) 지정 CSS
 st.markdown("""
 <style>
 /* 전체 페이지 배경색: 따뜻한 베이지 (#F5F0E6) */
@@ -31,20 +31,21 @@ h1, h2, h3, h4, p, label, .stMarkdown, .stText {
     border: 1px solid #4B3621 !important;
 }
 
-/* ★★★ 버튼 스타일 수정: 배경 검정, 글자 흰색 굵게 ★★★ */
+/* ★★★ 버튼 스타일 최종 수정: 프리헷 로고 색상(다크 브라운), 글자 흰색 굵게 ★★★ */
 .stButton>button {
-    background-color: #000000 !important;
-    color: #ffffff !important;
+    background-color: #4B3621 !important; /* 프리헷 로고 다크 브라운 색상 */
+    color: #ffffff !important;           /* 완전 선명한 흰색 글자 */
     border: none;
     border-radius: 8px;
-    font-size: 20px !important;
-    font-weight: bold !important;
+    font-size: 20px !important;           /* 글자 크기 키움 */
+    font-weight: bold !important;          /* ★★★ 볼드하게 ★★★ */
     width: 100%;
     padding: 15px;
     margin-top: 10px;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.3); /* 가독성을 위한 약간의 그림자 */
 }
 .stButton>button:hover {
-    background-color: #333333 !important;
+    background-color: #3b2816 !important; /* 호버 시 약간 더 어둡게 */
     color: #ffffff !important;
 }
 
@@ -87,12 +88,18 @@ if os.path.exists(logo_path):
     with col2:
         st.image(logo_path, use_container_width=True)
 else:
-    st.markdown("<h1 style='text-align: center;'>Frihet AS 접수 시스템</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center; color: #4B3621;'>Frihet AS 접수 시스템</h1>", unsafe_allow_html=True)
 
 st.markdown("<br>", unsafe_allow_html=True)
 
 # 필수 입력값 받기
-api_key = st.secrets["GEMINI_API_KEY"]
+# 보안을 위해 Secrets에서 API 키를 가져옵니다.
+try:
+    api_key = st.secrets["GEMINI_API_KEY"]
+except KeyError:
+    st.error("설정(Secrets)에서 'GEMINI_API_KEY'가 누락되었습니다.")
+    st.stop()
+
 store_name = st.text_input("🏢 AS 접수 점포명을 입력하세요 (예시: 프리헷 강남점)")
 
 st.markdown("---")
@@ -103,7 +110,7 @@ st.write("✍️ **방법 2: 텍스트 직접 입력**")
 user_text = st.text_area("파일이 없다면 여기에 증상을 직접 적어주세요.", placeholder="예: 세탁기 3번 기기에서 소음이 발생하고 결제가 안 됩니다.")
 st.markdown("---")
 
-# 실행 버튼 (강조된 스타일 적용됨)
+# 실행 버튼 (개선된 스타일 적용됨)
 if st.button("🚀 AS 접수 시작하기"):
     # 누락된 입력값 방어 코딩
     if not store_name:
@@ -116,24 +123,28 @@ if st.button("🚀 AS 접수 시작하기"):
         st.stop()
 
     if not os.path.exists("list.pdf"):
-        st.error("현재 폴더에 'list.pdf' 파일이 없습니다.")
+        st.error("현재 폴더에 'list.pdf' 파일이 없습니다. 가맹점 리스트 문서를 준비해주세요.")
         st.stop()
     if not os.path.exists("contact.png"):
-        st.error("현재 폴더에 'contact.png' 파일이 없습니다.")
+        st.error("현재 폴더에 'contact.png' 파일이 없습니다. 비상연락망 이미지를 준비해주세요.")
         st.stop()
 
     # 제미나이 초기 권한 설정
     genai.configure(api_key=api_key)
-    model_flash = genai.GenerativeModel('gemini-1.5-flash') # 모델명 최신화 유지
+    model_flash = genai.GenerativeModel('gemini-1.5-flash') # 최신 모델로 유지
 
     with st.spinner("AI가 자료들을 스캔하고 분석중입니다. (잠시만 기다려주세요!)"):
         
         # [단계 1] 가맹점 PDF 정보 추출
         pdf_text = ""
-        reader = PyPDF2.PdfReader("list.pdf")
-        for page in reader.pages:
-            text = page.extract_text()
-            if text: pdf_text += text + "\n"
+        try:
+            reader = PyPDF2.PdfReader("list.pdf")
+            for page in reader.pages:
+                text = page.extract_text()
+                if text: pdf_text += text + "\n"
+        except Exception as e:
+            st.error(f"list.pdf 분석 실패: {e}")
+            st.stop()
             
         pdf_prompt = f"{pdf_text}\n\n위 데이터에서 '{store_name}' 점포의 장비번호, 출고일자, 주소, 연락처, 담당 바이저 이름을 JSON으로 추출해."
         pdf_resp = model_flash.generate_content(pdf_prompt)
@@ -143,9 +154,12 @@ if st.button("🚀 AS 접수 시작하기"):
         # [단계 2] 비상연락망 OCR
         supervisor_phone = "확인불가"
         if supervisor_name:
-            contact_img = Image.open("contact.png")
-            ocr_resp = model_flash.generate_content([contact_img, f"'{supervisor_name}'의 연락처 번호만 말해줘."])
-            supervisor_phone = ocr_resp.text.strip()
+            try:
+                contact_img = Image.open("contact.png")
+                ocr_resp = model_flash.generate_content([contact_img, f"'{supervisor_name}'의 연락처 번호만 말해줘. (010-XXXX-XXXX 형식)"])
+                supervisor_phone = ocr_resp.text.strip()
+            except Exception as e:
+                supervisor_phone = "연락처 스캔 실패"
 
         # [단계 3] 증상 분석 (파일 또는 텍스트)
         symptom_text = ""
@@ -156,31 +170,33 @@ if st.button("🚀 AS 접수 시작하기"):
             file_ext = evidence_file.name.split(".")[-1].lower()
             analysis_prompt = "AS 접수 자료야. '증상'과 '처리요청'을 JSON으로 요약해."
             
-            if file_ext in ["png", "jpg", "jpeg"]:
-                img = Image.open(evidence_file)
-                resp = model_flash.generate_content([img, analysis_prompt])
-            else:
-                with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file_ext}") as tmp:
-                    tmp.write(evidence_file.read())
-                    uploaded_audio = genai.upload_file(path=tmp.name)
-                    resp = model_flash.generate_content([uploaded_audio, analysis_prompt])
-                    uploaded_audio.delete()
-                    os.remove(tmp.name)
-            
-            parsed = parse_json(resp.text)
-            symptom_text = parsed.get("증상", "")
-            request_text = parsed.get("처리요청", "")
+            try:
+                if file_ext in ["png", "jpg", "jpeg"]:
+                    img = Image.open(evidence_file)
+                    resp = model_flash.generate_content([img, analysis_prompt])
+                else: # 음성 파일
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file_ext}") as tmp:
+                        tmp.write(evidence_file.read())
+                        uploaded_audio = genai.upload_file(path=tmp.name)
+                        resp = model_flash.generate_content([uploaded_audio, analysis_prompt])
+                        uploaded_audio.delete()
+                        os.remove(tmp.name)
+                
+                parsed = parse_json(resp.text)
+                symptom_text = parsed.get("증상", "")
+                request_text = parsed.get("처리요청", "")
+            except Exception as e:
+                st.error(f"파일 분석 실패: {e}")
         
         # 2순위: 텍스트 입력이 있다면 내용 보강/대체
         if user_text.strip():
-            if not symptom_text: # 파일이 없었을 경우 텍스트로만 분석
-                text_prompt = f"다음 증상을 읽고 '증상'과 '처리요청'을 요약해: {user_text}"
-                resp = model_flash.generate_content(text_prompt)
-                # 단순 텍스트로 올 때가 많으므로 정제 로직
-                symptom_text = user_text if len(user_text) < 50 else "텍스트 입력 참조"
-                request_text = "현장 확인 및 수리 요청"
-            else:
+            # 파일 분석 내용이 있을 경우 뒤에 붙임
+            if symptom_text:
                 symptom_text += f" (추가입력: {user_text})"
+                if not request_text: request_text = "현장 확인 및 수리 요청"
+            else: # 파일 없이 텍스트로만 분석
+                symptom_text = user_text
+                request_text = "현장 확인 및 수리 요청"
 
         # [단계 4] 최종 출력
         today = datetime.now().strftime("%Y년 %m월 %d일")
