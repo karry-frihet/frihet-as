@@ -89,7 +89,7 @@ else:
 st.markdown("<br>", unsafe_allow_html=True)
 
 # 필수 입력값 받기
-api_key = st.text_input("🔑 Gemini API 키를 입력하세요 (안전하게 로컬에서만 사용됩니다)", type="password")
+api_key = st.secrets["GEMINI_API_KEY"]
 store_name = st.text_input("🏢 AS 접수 점포명을 입력하세요 (예시: 프리헷 강남점)")
 
 st.write("🎙️ **카톡 캡처 사진**이나 **녹음 파일**을 올려주세요. AI가 자동으로 내용을 요약합니다.")
@@ -98,9 +98,7 @@ evidence_file = st.file_uploader("사진(png, jpg) 또는 음성(mp3, wav, m4a)"
 # 실행 버튼
 if st.button("🚀 AS 자동 접수 시작하기"):
     # 누락된 파일이나 입력값 방어 코딩
-    if not api_key:
-        st.error("Gemini API 키를 먼저 입력해주세요!")
-        st.stop()
+
     if not store_name:
         st.warning("점포명을 입력해주세요!")
         st.stop()
