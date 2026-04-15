@@ -13,51 +13,29 @@ from datetime import datetime
 # ========================================================
 st.set_page_config(page_title="Frihet 무인카페 AS 접수", layout="centered")
 
-# 배경색 및 버튼 스타일 최종 수정 CSS
 st.markdown("""
 <style>
-/* 전체 페이지 배경색: 따뜻한 베이지 */
-.stApp {
-    background-color: #F5F0E6;
-}
+.stApp { background-color: #F5F0E6; }
+h1, h2, h3, h4, p, label, .stMarkdown, .stText { color: #4B3621 !important; }
+.stTextInput>div>div>input, .stTextArea>div>div>textarea { border: 1px solid #4B3621 !important; }
 
-/* 텍스트 색상 고정 (다크 브라운) */
-h1, h2, h3, h4, p, label, .stMarkdown, .stText {
-    color: #4B3621 !important;
-}
-
-/* ★★★ 버튼 스타일: 밝은 브라운 배경 + 진한 검정 글자 ★★★ */
+/* 밝은 갈색 배경 + 진한 검정 글자 버튼 */
 div.stButton > button:first-child {
-    background-color: #D2B48C !important; /* 밝은 갈색 (라떼 색상) */
-    color: #000000 !important;           /* ★진한 검정색 글자★ */
-    border: 2px solid #4B3621 !important; /* 테두리는 브랜드색 */
+    background-color: #D2B48C !important;
+    color: #000000 !important;
+    border: 2px solid #4B3621 !important;
     border-radius: 12px !important;
     font-size: 22px !important;           
-    font-weight: 900 !important;          /* ★초강력 볼드★ */
+    font-weight: 900 !important;
     height: 4em !important;
     width: 100% !important;
     box-shadow: 0px 4px 6px rgba(0,0,0,0.1) !important;
 }
-
-/* 버튼 안의 글자색 강제 고정 */
-div.stButton > button:first-child span {
-    color: #000000 !important;
-}
-
-/* 호버 시 살짝 더 진해지게 */
-div.stButton > button:hover {
-    background-color: #C5A478 !important;
-    color: #000000 !important;
-}
-
-/* 입력창 스타일 */
-.stTextInput>div>div>input, .stTextArea>div>div>textarea {
-    border: 1px solid #4B3621 !important;
-}
+div.stButton > button:first-child span { color: #000000 !important; }
+div.stButton > button:hover { background-color: #C5A478 !important; color: #000000 !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# 안전하게 JSON 텍스트 파싱
 def parse_json(json_text):
     text = json_text.strip()
     text = re.sub(r'```json', '', text)
@@ -74,14 +52,15 @@ def parse_json(json_text):
 logo_path = "브랜드-로고.png"
 if os.path.exists(logo_path):
     col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        st.image(logo_path, use_container_width=True)
+    with col2: st.image(logo_path, use_container_width=True)
 else:
     st.markdown("<h1 style='text-align: center; color: #4B3621;'>Frihet AS 접수 시스템</h1>", unsafe_allow_html=True)
 
 st.markdown("<br>", unsafe_allow_html=True)
 
+# ★ 가장 안전한 방식: 스트림릿 비밀 금고에서 키를 꺼내옵니다.
 api_key = st.secrets["GEMINI_API_KEY"]
+
 store_name = st.text_input("🏢 AS 접수 점포명을 입력하세요 (예시: 프리헷 강남점)")
 
 st.markdown("---")
@@ -89,7 +68,6 @@ st.write("🎙️ **방법 1: 파일 업로드** (카톡 캡처나 음성)")
 evidence_file = st.file_uploader("사진(png, jpg) 또는 음성(mp3, wav, m4a)", type=["png", "jpg", "jpeg", "mp3", "wav", "m4a"])
 
 st.write("✍️ **방법 2: 텍스트 직접 입력**")
-# ★ 예시 문구 카페 상황에 맞게 수정 ★
 user_text = st.text_area("파일이 없다면 여기에 증상을 직접 적어주세요.", placeholder="예: 커피 머신에서 원두 추출이 안 되고 물만 나옵니다. 제빙기 얼음이 얼지 않아요.")
 st.markdown("---")
 
@@ -104,14 +82,17 @@ if st.button("🚀 AS 접수 시작하기"):
         st.stop()
 
     genai.configure(api_key=api_key)
-    model_flash = genai.GenerativeModel('gemini-1.5-flash')
+    model_flash = genai.GenerativeModel('gemini-2.5-flash') # 최신 엔진으로 세팅 완료
 
     with st.spinner("AI가 분석 중입니다..."):
         # PDF 정보 추출
         pdf_text = ""
-        reader = PyPDF2.PdfReader("list.pdf")
-        for page in reader.pages:
-            pdf_text += page.extract_text() + "\n"
+        try:
+            reader = PyPDF2.PdfReader("list.pdf")
+            for page in reader.pages:
+                pdf_text += page.extract_text() + "\n"
+        except:
+            pass
             
         pdf_prompt = f"{pdf_text}\n\n위 데이터에서 '{store_name}' 점포의 장비번호, 출고일자, 주소, 연락처, 담당 바이저 이름을 JSON으로 추출해."
         pdf_resp = model_flash.generate_content(pdf_prompt)
@@ -121,9 +102,12 @@ if st.button("🚀 AS 접수 시작하기"):
         # 비상연락망 OCR
         supervisor_phone = "확인불가"
         if supervisor_name:
-            contact_img = Image.open("contact.png")
-            ocr_resp = model_flash.generate_content([contact_img, f"'{supervisor_name}'의 연락처 번호를 010-XXXX-XXXX 형식으로 말해줘."])
-            supervisor_phone = ocr_resp.text.strip()
+            try:
+                contact_img = Image.open("contact.png")
+                ocr_resp = model_flash.generate_content([contact_img, f"'{supervisor_name}'의 연락처 번호를 010-XXXX-XXXX 형식으로 말해줘."])
+                supervisor_phone = ocr_resp.text.strip()
+            except:
+                pass
 
         # 증상 분석
         symptom_text = ""
@@ -155,7 +139,7 @@ if st.button("🚀 AS 접수 시작하기"):
                 symptom_text = user_text
                 request_text = "현장 확인 및 수리 요청"
 
-        # 최종 출력
+        # 최종 출력 양식
         today = datetime.now().strftime("%Y년 %m월 %d일")
         final_text = f"""<< 무인머신 AS접수 >>
 ▣ 접수일 : {today}
